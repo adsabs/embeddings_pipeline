@@ -36,6 +36,27 @@ def main():
     if 'embeddings_cache' not in st.session_state:
         st.session_state.embeddings_cache = {}
     
+    # Initialize processing control state
+    if 'processing_state' not in st.session_state:
+        st.session_state.processing_state = 'stopped'
+    if 'processing_stop' not in st.session_state:
+        st.session_state.processing_stop = False
+    if 'processing_pause' not in st.session_state:
+        st.session_state.processing_pause = False
+    if 'processing_progress' not in st.session_state:
+        st.session_state.processing_progress = {
+            'current_year_idx': 0,
+            'processed_count': 0,
+            'chunk_count': 0,
+            'skipped_count': 0,
+            'chunk_embeddings': [],
+            'chunk_bibcodes': [],
+            'chunk_texts': [],
+            'output_path': None,
+            'timestamp': None,
+            'subfolder_name': None
+        }
+    
     # Sidebar configuration
     with st.sidebar:
         st.header("⚙️ Configuration")
@@ -72,14 +93,7 @@ def main():
                 help="Required for OpenAI models"
             )
         
-        # Batch size - optimized for performance
-        batch_size = st.slider(
-            "Batch Size",
-            min_value=1,
-            max_value=512,
-            value=64,
-            help="Number of texts to process simultaneously (higher = faster for GPU)"
-        )
+        # Batch size is now automatically optimized based on corpus size selection
         
         # Load existing embeddings
         st.header("📊 Existing Data")
@@ -100,22 +114,47 @@ def main():
     ])
     
     with tab1:
-        embedding_playground(selected_model, api_key, device, batch_size)
+        embedding_playground(selected_model, api_key, device)
     
     with tab2:
-        corpus_processing(selected_model, api_key, device, batch_size)
+        corpus_processing(selected_model, api_key, device)
     
     with tab3:
         similarity_search(embeddings_dir)
     
     with tab4:
-        model_comparison(api_key, device, batch_size)
+        model_comparison(api_key, device)
     
     with tab5:
         hybrid_search_testing(embeddings_dir, selected_model, api_key, device)
 
 
-def embedding_playground(model: str, api_key: Optional[str], device: str, batch_size: int):
+def get_optimal_batch_size(sample_size: str, custom_size: Optional[int] = None) -> int:
+    """Determine optimal batch size based on corpus size selection."""
+    if sample_size == "Full Corpus":
+        return 512  # Maximum throughput for full corpus
+    elif sample_size == "10000 papers":
+        return 256  # High throughput for larger samples
+    elif sample_size == "5000 papers":
+        return 128  # Moderate throughput
+    elif sample_size == "1000 papers":
+        return 64   # Conservative for smaller samples
+    elif sample_size == "Custom":
+        if custom_size:
+            if custom_size >= 10000:
+                return 256
+            elif custom_size >= 5000:
+                return 128
+            elif custom_size >= 1000:
+                return 64
+            else:
+                return 32  # Very small samples
+        return 64  # Default for custom
+    else:
+        return 64  # Default fallback
+
+
+def embedding_playground(model: str, api_key: Optional[str], device: str):
     """Interactive embedding generation and visualization."""
     st.header("Embedding Playground")
     st.markdown("Generate embeddings for custom text and visualize the results")
@@ -182,9 +221,10 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
     with col2:
         # Model info
         st.subheader("Model Info")
+        playground_batch_size = 32  # Fixed optimal size for playground
         config = EmbedderConfig(
             model=model,
-            batch_size=batch_size,
+            batch_size=playground_batch_size,
             api_key=api_key,
             device=device
         )
@@ -192,7 +232,7 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
         st.info(f"""
         **Model:** {model}
         **Type:** {config.model_type}
-        **Batch Size:** {batch_size}
+        **Batch Size:** {playground_batch_size} (optimized for playground)
         **Device:** {device}
         """)
         
@@ -210,7 +250,7 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
             status_text.text("Loading model...")
             config = EmbedderConfig(
                 model=model,
-                batch_size=batch_size,
+                batch_size=playground_batch_size,
                 api_key=api_key,
                 device=device
             )
@@ -219,8 +259,8 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
             status_text.text(f"Generating embeddings for {len(processed_texts)} texts...")
             embeddings = []
             
-            for i in range(0, len(processed_texts), batch_size):
-                batch = processed_texts[i:i+batch_size]
+            for i in range(0, len(processed_texts), playground_batch_size):
+                batch = processed_texts[i:i+playground_batch_size]
                 batch_embeddings = embedder.embed_batch(batch)
                 embeddings.extend(batch_embeddings)
                 
@@ -247,7 +287,7 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
             st.error(f"Error generating embeddings: {e}")
 
 
-def corpus_processing(model: str, api_key: Optional[str], device: str, batch_size: int):
+def corpus_processing(model: str, api_key: Optional[str], device: str):
     """Process SciX corpus and generate embeddings with metadata."""
     st.header("Corpus Processing")
     st.markdown("Process real SciX corpus data and generate embeddings with full metadata tracking")
@@ -269,8 +309,8 @@ def corpus_processing(model: str, api_key: Optional[str], device: str, batch_siz
         # Sample size first to determine if we need year input
         sample_size = st.selectbox(
             "Sample Size",
-            ["Full Corpus", "1000 papers", "5000 papers", "10000 papers", "Custom"],
-            help="Number of papers to process"
+            ["1000 papers", "5000 papers", "10000 papers", "Full Corpus", "Custom"],
+            help="Number of papers to process (Full Corpus = all available papers)"
         )
         
         if sample_size == "Custom":
@@ -284,14 +324,19 @@ def corpus_processing(model: str, api_key: Optional[str], device: str, batch_siz
         else:
             custom_size = None
         
+        # Determine and display optimal batch size
+        optimal_batch_size = get_optimal_batch_size(sample_size, custom_size)
+        st.info(f"🔧 **Optimal Batch Size:** {optimal_batch_size} (auto-selected for {sample_size.lower()})")
+        
         # Year selection (disabled for full corpus)
         if sample_size == "Full Corpus":
-            st.info("Full Corpus mode: Will automatically discover and process all available years")
-            st.warning("For maximum performance processing 25M+ papers: Use batch size 256+, ensure GPU memory available")
+            st.info("🚀 Full Corpus mode: Will process ALL available papers with incremental saving every 10,000 papers")
+            st.warning("⚡ For high-performance processing: Use batch size 256+, ensure adequate GPU memory")
+            st.info("⏸️ Use Pause/Stop controls during processing to manage long-running tasks")
             year_input = st.text_input(
                 "Years to Process",
                 value="Auto-discover all years",
-                help="Full corpus mode will find all available year files",
+                help="Full corpus mode will find and process all available year files",
                 key="corpus_years",
                 disabled=True
             )
@@ -383,8 +428,25 @@ def corpus_processing(model: str, api_key: Optional[str], device: str, batch_siz
             
             preview_corpus_data(input_dir, year_input, custom_fields, preview_limit)
     
-    # Main processing button
-    if st.button("Process Corpus", type="primary"):
+    # Show current progress status if any
+    has_saved_progress = (st.session_state.processing_progress['processed_count'] > 0 or 
+                         len(st.session_state.processing_progress['chunk_embeddings']) > 0)
+    
+    if has_saved_progress:
+        if st.session_state.processing_state == 'paused':
+            st.warning(f"⏸️ **Processing Paused** - {st.session_state.processing_progress['processed_count']:,} papers processed. Use Resume button below or reset to start over.")
+        else:
+            st.info(f"📊 **Previous Progress Found** - {st.session_state.processing_progress['processed_count']:,} papers processed. Will continue from where left off.")
+    
+    # Main processing button - changes based on state  
+    if has_saved_progress and st.session_state.processing_state == 'paused':
+        button_text = "▶️ Resume Processing"
+        button_type = "secondary"
+    else:
+        button_text = "🚀 Process Corpus" 
+        button_type = "primary"
+    
+    if st.button(button_text, type=button_type):
         if not Path(input_dir).exists():
             st.error(f"Input directory not found: {input_dir}")
             return
@@ -413,7 +475,7 @@ def corpus_processing(model: str, api_key: Optional[str], device: str, batch_siz
             model=model,
             api_key=api_key,
             device=device,
-            batch_size=batch_size,
+            batch_size=optimal_batch_size,
             prefix=prefix,
             suffix=suffix,
             delimiter=delimiter,
@@ -511,27 +573,109 @@ def process_corpus_data(
     include_metadata: List[str],
     limit: Optional[int] = None
 ):
-    """Process corpus data and generate embeddings with metadata."""
+    """Process corpus data and generate embeddings with metadata, including pause/stop and incremental saving."""
     
-    # Create timestamped subfolder with subset info
+    # Session state is already initialized in main()
+    
+    # Create or reuse timestamped subfolder with subset info
     from datetime import datetime
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Determine subset description for folder name
-    if limit is None:
-        subset_desc = "full_corpus"
+    # Check if we're resuming and already have an output path
+    if (st.session_state.processing_progress['output_path'] and 
+        Path(st.session_state.processing_progress['output_path']).exists()):
+        # Resuming - reuse existing path
+        output_path = Path(st.session_state.processing_progress['output_path'])
+        timestamp = st.session_state.processing_progress['timestamp']
+        subfolder_name = st.session_state.processing_progress['subfolder_name']
+        st.success(f"📁 Resuming with existing output folder: {subfolder_name}")
     else:
-        subset_desc = f"{limit}_papers"
+        # Starting fresh - create new timestamped folder
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Determine subset description for folder name
+        if limit is None:
+            subset_desc = "full_corpus"
+        else:
+            subset_desc = f"{limit}_papers"
+        
+        # Create subfolder: output_dir/YYYYMMDD_HHMMSS_subset_desc/
+        subfolder_name = f"{timestamp}_{subset_desc}"
+        output_path = Path(output_dir) / subfolder_name
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Save to session state for future resume
+        st.session_state.processing_progress.update({
+            'output_path': str(output_path),
+            'timestamp': timestamp,
+            'subfolder_name': subfolder_name
+        })
+        
+        st.info(f"📁 Created new output folder: {subfolder_name}")
     
-    # Create subfolder: output_dir/YYYYMMDD_HHMMSS_subset_desc/
-    subfolder_name = f"{timestamp}_{subset_desc}"
-    output_path = Path(output_dir) / subfolder_name
-    output_path.mkdir(parents=True, exist_ok=True)
-    
-    st.info(f"Output folder: {subfolder_name}")
+    # Initialize skipped bibcodes tracking
+    skipped_bibcodes_file = output_path / "skipped_bibcodes.txt"
     
     # Parse years
     year_list = parse_years(years)
+    
+    # Control buttons - always available during processing
+    control_container = st.container()
+    with control_container:
+        st.markdown("**🎛️ Processing Controls** (Available during processing)")
+        control_col1, control_col2, control_col3, control_col4 = st.columns(4)
+        
+        with control_col1:
+            if st.button("⏸️ Pause", key="pause_btn", help="Pause processing after current batch"):
+                st.session_state.processing_pause = True
+                st.session_state.processing_state = 'paused'
+                st.warning("⏸️ Processing will pause after current batch...")
+        
+        with control_col2:
+            if st.button("▶️ Resume", key="resume_btn", help="Resume paused processing"):
+                st.session_state.processing_pause = False
+                st.session_state.processing_state = 'running'
+                st.info("▶️ Resuming processing...")
+        
+        with control_col3:
+            if st.button("⏹️ Stop", key="stop_btn", help="Stop processing and save current progress"):
+                st.session_state.processing_stop = True
+                st.session_state.processing_state = 'stopping'
+                st.error("🛑 Processing will stop after current batch...")
+        
+        with control_col4:
+            if st.button("🔄 Reset", key="reset_btn", help="Reset all processing state"):
+                st.session_state.processing_stop = False
+                st.session_state.processing_pause = False
+                st.session_state.processing_state = 'stopped'
+                st.session_state.processing_progress = {
+                    'current_year_idx': 0,
+                    'processed_count': 0,
+                    'chunk_count': 0,
+                    'skipped_count': 0,
+                    'chunk_embeddings': [],
+                    'chunk_bibcodes': [],
+                    'chunk_texts': [],
+                    'output_path': None,
+                    'timestamp': None,
+                    'subfolder_name': None
+                }
+                st.success("🔄 All controls reset")
+    
+    # Status display
+    status_col1, status_col2 = st.columns(2)
+    with status_col1:
+        if st.session_state.processing_state == 'running':
+            st.success("🟢 **Status:** Processing Active")
+        elif st.session_state.processing_state == 'paused':
+            st.warning("🟡 **Status:** Paused (click Resume to continue)")
+        elif st.session_state.processing_state == 'stopping':
+            st.error("🔴 **Status:** Stopping...")
+        else:
+            st.info("⚪ **Status:** Ready to Process")
+    
+    with status_col2:
+        if st.session_state.processing_progress['processed_count'] > 0:
+            st.info(f"📊 **Progress:** {st.session_state.processing_progress['processed_count']:,} papers processed")
     
     # Create embedder
     model_progress = st.progress(0)
@@ -569,13 +713,47 @@ def process_corpus_data(
     )
     preparer = Preparer(preparer_config)
     
-    # Initialize tracking
-    all_embeddings = []
-    all_bibcodes = []
-    all_texts = []
-    processed_count = 0
+    # Initialize tracking - restore from saved state if resuming
+    has_saved_progress = (st.session_state.processing_progress['processed_count'] > 0 or 
+                         len(st.session_state.processing_progress['chunk_embeddings']) > 0)
     
-    # Process each year
+    if has_saved_progress and st.session_state.processing_state != 'stopped':
+        # Resuming from pause - restore state
+        processed_count = st.session_state.processing_progress['processed_count']
+        chunk_count = st.session_state.processing_progress['chunk_count']
+        skipped_count = st.session_state.processing_progress['skipped_count']
+        chunk_embeddings = st.session_state.processing_progress['chunk_embeddings']
+        chunk_bibcodes = st.session_state.processing_progress['chunk_bibcodes']
+        chunk_texts = st.session_state.processing_progress['chunk_texts']
+        start_year_idx = st.session_state.processing_progress['current_year_idx']
+        st.success(f"📈 Resuming from: {processed_count:,} papers processed, starting from year index {start_year_idx}")
+    else:
+        # Starting fresh
+        processed_count = 0
+        chunk_count = 0
+        skipped_count = 0
+        chunk_embeddings = []
+        chunk_bibcodes = []
+        chunk_texts = []
+        start_year_idx = 0
+        # Reset progress tracking
+        st.session_state.processing_progress = {
+            'current_year_idx': 0,
+            'processed_count': 0,
+            'chunk_count': 0,
+            'skipped_count': 0,
+            'chunk_embeddings': [],
+            'chunk_bibcodes': [],
+            'chunk_texts': [],
+            'output_path': None,
+            'timestamp': None,
+            'subfolder_name': None
+        }
+        st.info("🚀 Starting fresh processing")
+    
+    CHUNK_SIZE = 10000  # Save every 10k papers
+    
+    # Progress containers
     progress_container = st.container()
     status_container = st.container()
     
@@ -584,13 +762,40 @@ def process_corpus_data(
         batch_progress = st.progress(0)
         overall_status = st.empty()
         timing_status = st.empty()
+        control_status = st.empty()
     
     import time
     start_time = time.time()
     
+    # Set processing state
+    st.session_state.processing_state = 'running'
+    
     for year_idx, year in enumerate(year_list):
+        # Skip years we've already processed if resuming
+        if year_idx < start_year_idx:
+            continue
+            
+        if st.session_state.processing_stop:
+            control_status.warning("Processing stopped by user")
+            break
+            
+        # Handle pause
+        if st.session_state.processing_pause:
+            # Save current state
+            st.session_state.processing_progress.update({
+                'current_year_idx': year_idx,
+                'processed_count': processed_count,
+                'chunk_count': chunk_count,
+                'skipped_count': skipped_count,
+                'chunk_embeddings': chunk_embeddings,
+                'chunk_bibcodes': chunk_bibcodes,
+                'chunk_texts': chunk_texts
+            })
+            control_status.warning("⏸️ Processing paused. Click Resume to continue from this point.")
+            return
+            
         with status_container:
-            st.info(f"Processing year {year}...")
+            st.info(f"Processing year {year}... (Year {year_idx + 1}/{len(year_list)})")
         
         # Find year file
         year_file = find_year_file(input_dir, year)
@@ -600,12 +805,31 @@ def process_corpus_data(
         
         try:
             # Load and process data
-            loader = JSONLoader(show_progress=True)
+            loader = JSONLoader(show_progress=False)
             
             batch_texts = []
             batch_bibcodes = []
             
             for record in loader.load(year_file, fields + ["bibcode"]):
+                # Check for stop/pause - more responsive control
+                if st.session_state.processing_stop:
+                    control_status.warning("🛑 Stopping processing...")
+                    break
+                    
+                if st.session_state.processing_pause:
+                    # Save current state and pause
+                    st.session_state.processing_progress.update({
+                        'current_year_idx': year_idx,
+                        'processed_count': processed_count,
+                        'chunk_count': chunk_count,
+                        'skipped_count': skipped_count,
+                        'chunk_embeddings': chunk_embeddings,
+                        'chunk_bibcodes': chunk_bibcodes,
+                        'chunk_texts': chunk_texts
+                    })
+                    control_status.warning("⏸️ Processing paused. Click Resume to continue.")
+                    return
+                
                 if limit and processed_count >= limit:
                     break
                 
@@ -633,9 +857,10 @@ def process_corpus_data(
                             embeddings = embedder.embed_batch(batch_texts)
                             batch_time = time.time() - batch_start
                             
-                            all_embeddings.extend(embeddings)
-                            all_bibcodes.extend(batch_bibcodes)
-                            all_texts.extend(batch_texts)
+                            # Add to current chunk
+                            chunk_embeddings.extend(embeddings)
+                            chunk_bibcodes.extend(batch_bibcodes)
+                            chunk_texts.extend(batch_texts)
                             processed_count += len(batch_texts)
                             
                             # Calculate performance metrics
@@ -643,12 +868,41 @@ def process_corpus_data(
                             papers_per_second = processed_count / elapsed_time if elapsed_time > 0 else 0
                             
                             # Update progress
-                            overall_status.text(f"Processed {processed_count:,} papers | {papers_per_second:.1f} papers/sec")
+                            overall_status.text(f"Processed {processed_count:,} papers | {papers_per_second:.1f} papers/sec | Skipped: {skipped_count}")
                             timing_status.text(f"Batch: {batch_time:.2f}s | Total: {elapsed_time:.1f}s | ETA: {((limit or 25000000) - processed_count) / papers_per_second / 3600:.1f}h" if papers_per_second > 0 else "Calculating...")
+                            
+                            # Update session state progress for real-time tracking
+                            st.session_state.processing_progress.update({
+                                'processed_count': processed_count,
+                                'skipped_count': skipped_count
+                            })
                             
                             # Update batch progress
                             if limit:
                                 batch_progress.progress(min(processed_count / limit, 1.0))
+                            
+                            # Check if we need to save chunk (every 10k papers)
+                            if len(chunk_embeddings) >= CHUNK_SIZE:
+                                # Determine subset description for metadata
+                                if limit is None:
+                                    subset_desc = "full_corpus"
+                                else:
+                                    subset_desc = f"{limit}_papers"
+                                    
+                                save_chunk(output_path, chunk_embeddings, chunk_bibcodes, chunk_texts, 
+                                          chunk_count, export_format, include_metadata, embedder, config, 
+                                          fields, prefix, suffix, delimiter, truncate_length, year_list, timestamp, subset_desc, limit)
+                                chunk_count += 1
+                                
+                                # Update session state with new chunk count
+                                st.session_state.processing_progress['chunk_count'] = chunk_count
+                                
+                                # Clear chunk data
+                                chunk_embeddings = []
+                                chunk_bibcodes = []
+                                chunk_texts = []
+                                
+                                st.info(f"💾 Saved chunk {chunk_count} ({CHUNK_SIZE:,} papers)")
                             
                             # Clear batch
                             batch_texts = []
@@ -659,15 +913,19 @@ def process_corpus_data(
                                 break
                 
                 except Exception as e:
-                    st.warning(f"Skipping record due to error: {e}")
+                    # Log skipped bibcode instead of showing warning
+                    skipped_bibcode = record.get('bibcode', f'unknown_{processed_count}')
+                    with open(skipped_bibcodes_file, 'a') as f:
+                        f.write(f"{skipped_bibcode}\t{str(e)}\n")
+                    skipped_count += 1
                     continue
             
             # Process remaining batch
-            if batch_texts:
+            if batch_texts and not st.session_state.processing_stop:
                 embeddings = embedder.embed_batch(batch_texts)
-                all_embeddings.extend(embeddings)
-                all_bibcodes.extend(batch_bibcodes)
-                all_texts.extend(batch_texts)
+                chunk_embeddings.extend(embeddings)
+                chunk_bibcodes.extend(batch_bibcodes)
+                chunk_texts.extend(batch_texts)
                 processed_count += len(batch_texts)
         
         except Exception as e:
@@ -676,56 +934,51 @@ def process_corpus_data(
         
         # Update year progress
         year_progress.progress((year_idx + 1) / len(year_list))
+        
+        if st.session_state.processing_stop:
+            break
     
-    if not all_embeddings:
+    # Save final chunk if there's remaining data
+    if chunk_embeddings:
+        save_chunk(output_path, chunk_embeddings, chunk_bibcodes, chunk_texts, 
+                  chunk_count, export_format, include_metadata, embedder, config, 
+                  fields, prefix, suffix, delimiter, truncate_length, year_list, timestamp, subset_desc, limit)
+    
+    # Create a comprehensive summary file
+    create_processing_summary(output_path, processed_count, skipped_count, chunk_count, 
+                             optimal_batch_size, fields, embedder, config, 
+                             timestamp, subset_desc, year_list, export_format)
+    
+    # Reset processing state
+    st.session_state.processing_state = 'stopped'
+    st.session_state.processing_stop = False
+    st.session_state.processing_pause = False
+    # Clear progress tracking since processing is complete
+    st.session_state.processing_progress = {
+        'current_year_idx': 0,
+        'processed_count': 0,
+        'chunk_count': 0,
+        'skipped_count': 0,
+        'chunk_embeddings': [],
+        'chunk_bibcodes': [],
+        'chunk_texts': [],
+        'output_path': None,
+        'timestamp': None,
+        'subfolder_name': None
+    }
+    
+    if processed_count == 0:
         st.error("No embeddings were generated")
         return
     
-    # Convert to numpy array
-    embeddings_array = np.array(all_embeddings)
-    
-    # Generate metadata
-    metadata = {
-        "processing_info": {
-            "timestamp": timestamp,
-            "output_folder": subfolder_name,
-            "subset_description": subset_desc,
-            "subset_limit": limit,
-            "model": model,
-            "embedding_dimension": embeddings_array.shape[1],
-            "total_papers": len(all_embeddings),
-            "fields_used": fields,
-            "field_config": field_config if 'field_config' in locals() else "Custom",
-            "prefix": prefix,
-            "suffix": suffix,
-            "delimiter": delimiter,
-            "truncate_length": truncate_length,
-            "years_processed": year_list
-        },
-        "model_info": {
-            "model_name": embedder.name,
-            "model_type": config.model_type,
-            "embedding_dim": embedder.dim,
-            "batch_size": batch_size,
-            "device": device
-        }
-    }
-    
-    # Save outputs based on format
-    if export_format == "JSON + Metadata":
-        save_json_format(output_path, embeddings_array, all_bibcodes, all_texts, metadata, include_metadata)
-    elif export_format == "CSV + Embeddings":
-        save_csv_format(output_path, embeddings_array, all_bibcodes, all_texts, metadata, include_metadata)
-    else:  # Solr-ready Format
-        save_solr_format(output_path, embeddings_array, all_bibcodes, all_texts, metadata, include_metadata)
-    
     # Display success message
-    st.success(f"Processing complete!")
+    status_msg = "Processing complete!" if not st.session_state.processing_stop else "Processing stopped by user"
+    st.success(status_msg)
     st.info(f"""
     **Summary:**
     - Papers processed: {processed_count:,}
-    - Embeddings generated: {len(all_embeddings):,}
-    - Embedding dimension: {embeddings_array.shape[1]}
+    - Papers skipped: {skipped_count}
+    - Chunks saved: {chunk_count + (1 if chunk_embeddings else 0)}
     - Subset: {subset_desc.replace('_', ' ').title()}
     - Output folder: {subfolder_name}
     - Full path: {output_path}
@@ -736,7 +989,7 @@ def process_corpus_data(
     
     # List output files
     output_files = list(output_path.glob("*"))
-    for file_path in output_files:
+    for file_path in sorted(output_files):
         if file_path.is_file():
             with open(file_path, 'rb') as f:
                 st.download_button(
@@ -745,6 +998,175 @@ def process_corpus_data(
                     file_name=file_path.name,
                     mime="application/octet-stream"
                 )
+
+
+def save_chunk(output_path: Path, embeddings: list, bibcodes: list, texts: list, 
+               chunk_num: int, export_format: str, include_metadata: list, 
+               embedder, config, fields: list, prefix: str, suffix: str, 
+               delimiter: str, truncate_length: int, year_list: list, 
+               timestamp: str, subset_desc: str, limit: Optional[int]):
+    """Save a chunk of embeddings incrementally."""
+    
+    embeddings_array = np.array(embeddings)
+    
+    # Generate metadata for this chunk
+    import time
+    processing_time = time.time()
+    
+    metadata = {
+        "processing_info": {
+            "timestamp": timestamp,
+            "processing_time_unix": processing_time,
+            "processing_time_iso": time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(processing_time)),
+            "chunk_number": chunk_num,
+            "subset_description": subset_desc,
+            "subset_limit": limit,
+            "embedding_dimension": embeddings_array.shape[1],
+            "papers_in_chunk": len(embeddings),
+            "fields_used": fields,
+            "field_combination": f"{'|'.join(fields)}",
+            "preprocessing": {
+                "prefix": prefix,
+                "suffix": suffix,
+                "delimiter": delimiter,
+                "truncate_length": truncate_length
+            },
+            "years_processed": year_list
+        },
+        "model_info": {
+            "model_name": embedder.name,
+            "model_type": config.model_type,
+            "embedding_dim": embedder.dim,
+            "batch_size": config.batch_size,
+            "device": config.device
+        },
+        "data_mapping": {
+            "bibcode_to_index": {bibcode: idx for idx, bibcode in enumerate(bibcodes)},
+            "total_papers_in_chunk": len(bibcodes),
+            "first_bibcode": bibcodes[0] if bibcodes else None,
+            "last_bibcode": bibcodes[-1] if bibcodes else None
+        }
+    }
+    
+    # Create chunk-specific filename
+    chunk_suffix = f"_chunk_{chunk_num:04d}"
+    
+    # Save based on format
+    if export_format == "JSON + Metadata":
+        save_json_format_chunk(output_path, embeddings_array, bibcodes, texts, metadata, include_metadata, chunk_suffix)
+    elif export_format == "CSV + Embeddings":
+        save_csv_format_chunk(output_path, embeddings_array, bibcodes, texts, metadata, include_metadata, chunk_suffix)
+    else:  # Solr-ready Format
+        save_solr_format_chunk(output_path, embeddings_array, bibcodes, texts, metadata, include_metadata, chunk_suffix)
+
+
+def save_json_format_chunk(output_path: Path, embeddings: np.ndarray, bibcodes: List[str], 
+                          texts: List[str], metadata: Dict, include_metadata: List[str], chunk_suffix: str):
+    """Save chunk in JSON format."""
+    data = {
+        "embeddings": embeddings.tolist(),
+        "bibcodes": bibcodes,
+        "metadata": metadata
+    }
+    
+    if "Raw Paper Data" in include_metadata:
+        data["texts"] = texts
+    
+    with open(output_path / f"embeddings{chunk_suffix}.json", "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def save_csv_format_chunk(output_path: Path, embeddings: np.ndarray, bibcodes: List[str],
+                         texts: List[str], metadata: Dict, include_metadata: List[str], chunk_suffix: str):
+    """Save chunk in CSV format."""
+    import pandas as pd
+    df_data = {"bibcode": bibcodes}
+    
+    # Add embedding dimensions as columns
+    for i in range(embeddings.shape[1]):
+        df_data[f"dim_{i}"] = embeddings[:, i]
+    
+    if "Raw Paper Data" in include_metadata:
+        df_data["text"] = texts
+    
+    df = pd.DataFrame(df_data)
+    df.to_csv(output_path / f"embeddings{chunk_suffix}.csv", index=False)
+
+
+def save_solr_format_chunk(output_path: Path, embeddings: np.ndarray, bibcodes: List[str],
+                          texts: List[str], metadata: Dict, include_metadata: List[str], chunk_suffix: str):
+    """Save chunk in Solr-ready format."""
+    solr_docs = []
+    
+    for i, (bibcode, embedding) in enumerate(zip(bibcodes, embeddings)):
+        doc = {
+            "bibcode": bibcode,
+            "embedding_vector": embedding.tolist(),
+            "embedding_model": metadata["model_info"]["model_name"],
+            "embedding_dim": len(embedding),
+            "fields_used": metadata["processing_info"]["fields_used"]
+        }
+        
+        if "Raw Paper Data" in include_metadata:
+            doc["embedded_text"] = texts[i]
+        
+        solr_docs.append(doc)
+    
+    # Save as JSONL for Solr ingestion
+    with open(output_path / f"solr_embeddings{chunk_suffix}.jsonl", "w") as f:
+        for doc in solr_docs:
+            f.write(json.dumps(doc) + "\n")
+
+
+def create_processing_summary(output_path: Path, processed_count: int, skipped_count: int, 
+                             chunk_count: int, batch_size: int, fields: List[str], 
+                             embedder, config, timestamp: str, subset_desc: str, 
+                             year_list: List[int], export_format: str):
+    """Create a comprehensive summary of the processing run."""
+    import time
+    
+    summary = {
+        "processing_summary": {
+            "run_id": timestamp,
+            "completion_time": time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime()),
+            "total_papers_processed": processed_count,
+            "total_papers_skipped": skipped_count,
+            "success_rate": f"{processed_count / (processed_count + skipped_count) * 100:.2f}%" if (processed_count + skipped_count) > 0 else "N/A",
+            "chunks_created": chunk_count + (1 if chunk_count == 0 else 0),
+            "subset_description": subset_desc
+        },
+        "model_configuration": {
+            "model_name": embedder.name,
+            "model_type": config.model_type,
+            "embedding_dimension": embedder.dim,
+            "batch_size": batch_size,
+            "device": config.device
+        },
+        "text_processing": {
+            "fields_used": fields,
+            "field_combination": " + ".join(fields),
+            "preprocessing_applied": True
+        },
+        "data_sources": {
+            "years_processed": year_list,
+            "year_range": f"{min(year_list)}-{max(year_list)}" if len(year_list) > 1 else str(year_list[0]) if year_list else "None"
+        },
+        "output_format": {
+            "export_format": export_format,
+            "files_created": f"Multiple chunk files in {export_format.lower().replace(' + ', '_').replace(' ', '_')}_format",
+            "bibcode_mapping": "Included in each file",
+            "metadata_included": "Full metadata in each chunk"
+        },
+        "file_description": {
+            "embeddings_chunks": f"embeddings_chunk_XXXX.{export_format.split()[0].lower()}",
+            "skipped_papers": "skipped_bibcodes.txt (if any)",
+            "this_summary": "processing_summary.json"
+        }
+    }
+    
+    # Save summary
+    with open(output_path / "processing_summary.json", "w") as f:
+        json.dump(summary, f, indent=2)
 
 
 def similarity_search(embeddings_dir: str):
@@ -813,7 +1235,7 @@ def similarity_search(embeddings_dir: str):
         st.error(f"Error loading embeddings: {e}")
 
 
-def model_comparison(api_key: Optional[str], device: str, batch_size: int):
+def model_comparison(api_key: Optional[str], device: str):
     """Compare different embedding models side by side."""
     st.header("Model Comparison")
     st.markdown("Compare how different models embed the same text")
@@ -850,7 +1272,8 @@ def model_comparison(api_key: Optional[str], device: str, batch_size: int):
     )
     
     if test_text and st.button("Compare Models", type="primary"):
-        compare_models(selected_models, test_text, api_key, device, batch_size)
+        comparison_batch_size = 32  # Fixed optimal size for comparison
+        compare_models(selected_models, test_text, api_key, device, comparison_batch_size)
 
 
 def hybrid_search_testing(embeddings_dir: str, model: str, api_key: Optional[str], device: str):
@@ -1148,7 +1571,7 @@ def test_hybrid_search(query: str, semantic_weight: float, keyword_weight: float
     
     # Generate query embedding
     try:
-        config = EmbedderConfig(model=model, api_key=api_key, device=device)
+        config = EmbedderConfig(model=model, api_key=api_key, device=device, batch_size=32)
         embedder = create_embedder(config)
         query_embedding = embedder.embed_single(query)
         

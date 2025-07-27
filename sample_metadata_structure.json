@@ -1,0 +1,50 @@
+{
+  "embeddings": [
+    [0.1, 0.2, 0.3, "..."],
+    [0.4, 0.5, 0.6, "..."],
+    "... more embeddings"
+  ],
+  "bibcodes": [
+    "2023ApJ...950..123A",
+    "2023MNRAS.518.1234B",
+    "... more bibcodes"
+  ],
+  "metadata": {
+    "processing_info": {
+      "timestamp": "20250127_102030",
+      "processing_time_unix": 1706349630.123,
+      "processing_time_iso": "2025-01-27 10:20:30 UTC",
+      "chunk_number": 0,
+      "subset_description": "10000_papers",
+      "subset_limit": 10000,
+      "embedding_dimension": 768,
+      "papers_in_chunk": 10000,
+      "fields_used": ["title", "abstract"],
+      "field_combination": "title|abstract",
+      "preprocessing": {
+        "prefix": "",
+        "suffix": "",
+        "delimiter": "\n\n",
+        "truncate_length": 8192
+      },
+      "years_processed": [2023]
+    },
+    "model_info": {
+      "model_name": "nasa-impact/nasa-smd-ibm-st-v2",
+      "model_type": "sentence_transformer",
+      "embedding_dim": 768,
+      "batch_size": 256,
+      "device": "cuda"
+    },
+    "data_mapping": {
+      "bibcode_to_index": {
+        "2023ApJ...950..123A": 0,
+        "2023MNRAS.518.1234B": 1,
+        "... more mappings": "..."
+      },
+      "total_papers_in_chunk": 10000,
+      "first_bibcode": "2023ApJ...950..123A",
+      "last_bibcode": "2023ApJ...950..999Z"
+    }
+  }
+}
