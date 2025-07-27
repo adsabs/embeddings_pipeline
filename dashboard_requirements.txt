@@ -1,0 +1,22 @@
+# Dashboard-specific requirements
+# Run: pip install -r dashboard_requirements.txt
+
+# Core dashboard
+streamlit>=1.28.0
+plotly>=5.15.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+
+# Essential for embeddings
+numpy>=1.20.0
+pyyaml>=6.0
+
+# Recommended embedding models for dashboard
+sentence-transformers>=2.2.0
+torch>=1.12.0
+
+# Optional: OpenAI integration
+# openai>=1.0.0
+
+# Optional: Vector indexing for similarity search
+# faiss-cpu>=1.7.0

@@ -1,0 +1,163 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sciembed"
+version = "0.1.0"
+description = "High-performance embedding pipeline for scientific literature"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "SciEmbed Team", email = "contact@sciembed.org"}
+]
+keywords = ["embeddings", "scientific-literature", "nlp", "astronomy", "ads"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Text Processing :: Linguistic",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.20.0",
+    "pyarrow>=10.0.0",
+    "orjson>=3.8.0",
+    "ijson>=3.2.0",
+    "tqdm>=4.64.0",
+    "pyyaml>=6.0",
+    "click>=8.0.0",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.0.0"]
+huggingface = [
+    "sentence-transformers>=2.2.0",
+    "torch>=1.12.0",
+    "transformers>=4.21.0",
+]
+faiss = ["faiss-cpu>=1.7.0"]
+faiss-gpu = ["faiss-gpu>=1.7.0"]
+all = [
+    "sciembed[openai,huggingface,faiss]"
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=22.0.0",
+    "ruff>=0.0.270",
+    "mypy>=1.0.0",
+    "pre-commit>=2.20.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/scixmuse/sciembed"
+Repository = "https://github.com/scixmuse/sciembed"
+Documentation = "https://sciembed.readthedocs.io"
+"Bug Tracker" = "https://github.com/scixmuse/sciembed/issues"
+
+[project.scripts]
+sciembed = "sciembed.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sciembed = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.isort]
+known-first-party = ["sciembed"]
+
+[tool.mypy]
+python_version = "3.8"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "ijson.*",
+    "orjson.*",
+    "faiss.*",
+    "sentence_transformers.*",
+    "openai.*",
+    "torch.*",
+    "transformers.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=sciembed",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "gpu: marks tests that require GPU",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "src/sciembed/cli.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

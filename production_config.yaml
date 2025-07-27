@@ -1,0 +1,33 @@
+# Production configuration for ADS embedding pipeline
+input_dir: "/data/ads_metadata_by_year_full"
+output_dir: "/embeddings/nasa_smd"
+years: [1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
+
+# Text preparation
+fields: ["title", "abstract"]
+prefix: ""
+suffix: ""
+delimiter: "\n\n"
+lowercase: true
+truncate: 8192  # Increased for astronomy papers
+
+# Model configuration
+model: "hf://nasa-impact/nasa-smd-ibm-st-v2"
+batch_size: 32
+device: "cuda"
+
+# Performance settings
+use_async: true
+num_workers: 8
+use_float16: true
+show_progress: true
+
+# Storage & indexing
+create_faiss_index: true
+faiss_index_type: "flat"  # or "hnsw" for faster search
+
+# Resumability & deduplication
+resume: true
+deduplicate: true
+dedup_use_rocksdb: true
+dedup_cross_year: true
