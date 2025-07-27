@@ -129,6 +129,110 @@ def main():
         hybrid_search_testing(embeddings_dir, selected_model, api_key, device)
 
 
+def launch_background_job(
+    input_dir: str,
+    years: str,
+    fields: List[str],
+    model: str,
+    api_key: Optional[str],
+    device: str,
+    batch_size: int,
+    prefix: str,
+    suffix: str,
+    output_dir: str,
+    limit: Optional[int] = None
+):
+    """Launch background CLI processing job."""
+    import subprocess
+    import os
+    from datetime import datetime
+    
+    # Create timestamped output directory for background job
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if limit is None:
+        subset_desc = "full_corpus"
+    else:
+        subset_desc = f"{limit}_papers"
+    
+    bg_output_dir = f"{output_dir}/background_{timestamp}_{subset_desc}"
+    
+    # Build CLI command
+    cmd_parts = [
+        "sciembed", "ingest",
+        "--input", input_dir,
+        "--output", bg_output_dir,
+        "--years", years,
+        "--fields", ",".join(fields),
+        "--model", model,
+        "--batch-size", str(batch_size),
+        "--device", device
+    ]
+    
+    # Add optional parameters
+    if api_key:
+        cmd_parts.extend(["--api-key", api_key])
+    if prefix:
+        cmd_parts.extend(["--prefix", prefix])
+    if suffix:
+        cmd_parts.extend(["--suffix", suffix])
+    
+    # Create log file
+    log_file = f"{bg_output_dir}_process.log"
+    
+    try:
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Launch background process
+        with open(log_file, 'w') as log:
+            process = subprocess.Popen(
+                cmd_parts,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                cwd=os.getcwd()
+            )
+        
+        # Store job info in session state
+        if 'background_jobs' not in st.session_state:
+            st.session_state.background_jobs = []
+        
+        job_info = {
+            'pid': process.pid,
+            'timestamp': timestamp,
+            'output_dir': bg_output_dir,
+            'log_file': log_file,
+            'command': ' '.join(cmd_parts),
+            'status': 'running'
+        }
+        st.session_state.background_jobs.append(job_info)
+        
+        st.success(f"🚀 **Background job launched successfully!**")
+        st.info(f"**Process ID:** {process.pid}")
+        st.info(f"**Output Directory:** {bg_output_dir}")
+        st.info(f"**Log File:** {log_file}")
+        st.warning("⚠️ **Important:** This job will continue running even if you close the browser or lose connection!")
+        
+        # Show command that was run
+        with st.expander("🔍 Command Details"):
+            st.code(' '.join(cmd_parts), language='bash')
+        
+        # Instructions for monitoring
+        st.markdown("### 📊 Monitoring Your Background Job:")
+        st.code(f"""
+# Check if process is still running:
+ps aux | grep {process.pid}
+
+# Monitor log file:
+tail -f {log_file}
+
+# Stop the job if needed:
+kill {process.pid}
+        """, language='bash')
+        
+    except Exception as e:
+        st.error(f"❌ Failed to launch background job: {e}")
+
+
 def get_optimal_batch_size(sample_size: str, custom_size: Optional[int] = None) -> int:
     """Determine optimal batch size based on corpus size selection."""
     if sample_size == "Full Corpus":
@@ -292,6 +396,69 @@ def corpus_processing(model: str, api_key: Optional[str], device: str):
     st.header("Corpus Processing")
     st.markdown("Process real SciX corpus data and generate embeddings with full metadata tracking")
     
+    # Background job monitoring section
+    if 'background_jobs' in st.session_state and st.session_state.background_jobs:
+        st.subheader("🔍 Background Job Monitor")
+        
+        for i, job in enumerate(st.session_state.background_jobs):
+            with st.expander(f"Job {i+1}: PID {job['pid']} ({job['timestamp']})", expanded=True):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    # Check if process is still running
+                    try:
+                        import psutil
+                        process = psutil.Process(job['pid'])
+                        if process.is_running():
+                            st.success(f"🟢 **Status:** Running")
+                            try:
+                                st.info(f"**CPU:** {process.cpu_percent():.1f}%")
+                                st.info(f"**Memory:** {process.memory_info().rss / 1024 / 1024:.1f} MB")
+                            except:
+                                pass  # Sometimes these fail on first call
+                        else:
+                            st.error(f"🔴 **Status:** Stopped")
+                    except ImportError:
+                        # Fallback without psutil
+                        import os
+                        try:
+                            os.kill(job['pid'], 0)  # Test if process exists
+                            st.success(f"🟢 **Status:** Running")
+                        except OSError:
+                            st.error(f"🔴 **Status:** Process not found")
+                    except Exception as e:
+                        st.warning(f"⚠️ **Status:** Unknown ({e})")
+                
+                with col2:
+                    st.info(f"**Output:** {job['output_dir']}")
+                    st.info(f"**Log:** {job['log_file']}")
+                    
+                    # Show recent log lines
+                    if st.button(f"📄 Show Recent Logs", key=f"logs_{job['pid']}"):
+                        try:
+                            with open(job['log_file'], 'r') as f:
+                                lines = f.readlines()
+                                recent_lines = lines[-20:] if len(lines) > 20 else lines
+                                st.text_area("Recent Log Output", ''.join(recent_lines), height=200, key=f"log_content_{job['pid']}")
+                        except Exception as e:
+                            st.error(f"Could not read log file: {e}")
+                
+                with col3:
+                    if st.button(f"⏹️ Kill Job", key=f"kill_{job['pid']}", help="Stop this background job"):
+                        try:
+                            import os
+                            os.kill(job['pid'], 9)  # SIGKILL
+                            st.success(f"Job {job['pid']} terminated")
+                            # Remove from session state
+                            st.session_state.background_jobs.remove(job)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to kill job: {e}")
+                    
+                    st.code(f"tail -f {job['log_file']}", language='bash')
+        
+        st.markdown("---")
+    
     # Configuration section
     st.subheader("Corpus Configuration")
     
@@ -327,6 +494,13 @@ def corpus_processing(model: str, api_key: Optional[str], device: str):
         # Determine and display optimal batch size
         optimal_batch_size = get_optimal_batch_size(sample_size, custom_size)
         st.info(f"🔧 **Optimal Batch Size:** {optimal_batch_size} (auto-selected for {sample_size.lower()})")
+        
+        # Processing mode selection
+        processing_mode = st.radio(
+            "Processing Mode",
+            ["Interactive (in browser)", "Background (persistent)"],
+            help="Interactive: runs in browser (stops if connection lost). Background: runs as persistent background job."
+        )
         
         # Year selection (disabled for full corpus)
         if sample_size == "Full Corpus":
@@ -439,14 +613,20 @@ def corpus_processing(model: str, api_key: Optional[str], device: str):
             st.info(f"📊 **Previous Progress Found** - {st.session_state.processing_progress['processed_count']:,} papers processed. Will continue from where left off.")
     
     # Main processing button - changes based on state  
-    if has_saved_progress and st.session_state.processing_state == 'paused':
+    if processing_mode == "Background (persistent)":
+        button_text = "🚀 Launch Background Job"
+        button_type = "primary"
+        button_help = "Launches persistent background processing that survives browser disconnection"
+    elif has_saved_progress and st.session_state.processing_state == 'paused':
         button_text = "▶️ Resume Processing"
         button_type = "secondary"
+        button_help = "Resume paused interactive processing"
     else:
         button_text = "🚀 Process Corpus" 
         button_type = "primary"
+        button_help = "Start interactive processing in browser"
     
-    if st.button(button_text, type=button_type):
+    if st.button(button_text, type=button_type, help=button_help):
         if not Path(input_dir).exists():
             st.error(f"Input directory not found: {input_dir}")
             return
@@ -467,24 +647,40 @@ def corpus_processing(model: str, api_key: Optional[str], device: str):
             else:
                 limit = int(sample_size.split()[0])
         
-        # Process the corpus
-        process_corpus_data(
-            input_dir=input_dir,
-            years=years_to_process,
-            fields=custom_fields,
-            model=model,
-            api_key=api_key,
-            device=device,
-            batch_size=optimal_batch_size,
-            prefix=prefix,
-            suffix=suffix,
-            delimiter=delimiter,
-            truncate_length=truncate_length,
-            output_dir=output_dir,
-            export_format=export_format,
-            include_metadata=include_metadata,
-            limit=limit
-        )
+        if processing_mode == "Background (persistent)":
+            # Launch background CLI job
+            launch_background_job(
+                input_dir=input_dir,
+                years=years_to_process,
+                fields=custom_fields,
+                model=model,
+                api_key=api_key,
+                device=device,
+                batch_size=optimal_batch_size,
+                prefix=prefix,
+                suffix=suffix,
+                output_dir=output_dir,
+                limit=limit
+            )
+        else:
+            # Run interactive processing
+            process_corpus_data(
+                input_dir=input_dir,
+                years=years_to_process,
+                fields=custom_fields,
+                model=model,
+                api_key=api_key,
+                device=device,
+                batch_size=optimal_batch_size,
+                prefix=prefix,
+                suffix=suffix,
+                delimiter=delimiter,
+                truncate_length=truncate_length,
+                output_dir=output_dir,
+                export_format=export_format,
+                include_metadata=include_metadata,
+                limit=limit
+            )
 
 
 def preview_corpus_data(input_dir: str, years: str, fields: List[str], limit: int = 5):

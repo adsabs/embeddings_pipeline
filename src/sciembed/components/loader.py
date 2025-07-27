@@ -361,6 +361,7 @@ class DirectoryLoader:
         
         for year in years:
             year_files = [
+                input_dir / f"ads_metadata_{year}_full.jsonl",  # ADS naming convention
                 input_dir / f"{year}.json",
                 input_dir / f"{year}.json.gz", 
                 input_dir / f"{year}.jsonl",

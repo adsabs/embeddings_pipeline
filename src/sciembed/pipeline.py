@@ -155,7 +155,7 @@ class Pipeline:
             # Process in batches
             embeddings, bibcodes = self._process_records_batched(records, year)
             
-            if not embeddings:
+            if embeddings.size == 0:
                 self.logger.warning(f"No embeddings generated for year {year}")
                 return
             
