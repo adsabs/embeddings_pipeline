@@ -1,6 +1,6 @@
-# 🔬 SciEmbed – Scientific Embeddings Pipeline for Astronomical Literature
+# SciX Experimental Embeddings Pipeline
 
-SciEmbed is a high-performance, end-to-end pipeline that converts **ADS literature (25 M+ papers)** into dense vector embeddings for:
+The SciX Experimental Embeddings Pipeline is a high-performance, end-to-end pipeline that converts **SciX corpus (25 M+ papers)** into dense vector embeddings for:
 
 * semantic similarity search  
 * hybrid keyword + vector search in Solr / Elastic  
@@ -28,7 +28,7 @@ git clone https://github.com/adsabs/embeddings_pipeline.git
 cd embeddings_pipeline
 pip install -e .[all]          # extras install faiss, streamlit, sentence-transformers…
 
-# 2. Ingest two years of ADS JSONL into embeddings/
+# 2. Ingest two years of SciX JSONL into embeddings/
 sciembed ingest \
     -i /data/ads/metadata_by_year        \
     -o ./embeddings \

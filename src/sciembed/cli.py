@@ -11,7 +11,7 @@ from .runner import run_pipeline
 @click.group()
 @click.version_option()
 def main():
-    """Scientific embeddings pipeline for astronomical literature."""
+    """SciX Experimental Embeddings Pipeline for scientific literature."""
     pass
 
 
@@ -122,7 +122,7 @@ def ingest(
     use_async: bool,
     workers: int
 ):
-    """Ingest and embed scientific papers."""
+    """Ingest and embed SciX corpus papers."""
     
     # Parse years
     parsed_years = _parse_years(years)

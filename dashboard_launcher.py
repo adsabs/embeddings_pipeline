@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Simple launcher script for the SciEmbed Streamlit dashboard."""
+"""Simple launcher script for the SciX Experimental Embeddings Pipeline."""
 
 import subprocess
 import sys
@@ -22,17 +22,17 @@ def main():
         "--server.enableCORS", "false"
     ]
     
-    print("🚀 Starting SciEmbed Dashboard...")
-    print(f"📍 Dashboard location: {dashboard_path}")
-    print("🌐 Dashboard will be available at: http://localhost:8502")
+    print("Starting SciX Experimental Embeddings Pipeline...")
+    print(f"Dashboard location: {dashboard_path}")
+    print("Dashboard will be available at: http://localhost:8502")
     print("-" * 50)
     
     try:
         subprocess.run(cmd)
     except KeyboardInterrupt:
-        print("\n👋 Dashboard stopped by user")
+        print("\nDashboard stopped by user")
     except Exception as e:
-        print(f"❌ Error starting dashboard: {e}")
+        print(f"Error starting dashboard: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

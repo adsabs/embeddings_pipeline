@@ -23,14 +23,14 @@ from sciembed.components.preparer import Preparer, PreparerConfig
 def main():
     """Main Streamlit dashboard application."""
     st.set_page_config(
-        page_title="SciEmbed Dashboard",
-        page_icon="🔬",
+        page_title="SciX Experimental Embeddings Pipeline",
+        page_icon="📊",
         layout="wide",
         initial_sidebar_state="expanded"
     )
     
-    st.title("🔬 SciEmbed: Scientific Embeddings Dashboard")
-    st.markdown("*Experimental testing interface for astronomical literature embeddings*")
+    st.title("SciX Experimental Embeddings Pipeline")
+    st.markdown("*Experimental testing interface for SciX corpus embeddings*")
     
     # Initialize session state
     if 'embeddings_cache' not in st.session_state:
@@ -92,11 +92,11 @@ def main():
     
     # Main content area with tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🧪 Embedding Playground",
-        "📚 Corpus Processing",
-        "🔍 Similarity Search", 
-        "⚖️ Model Comparison",
-        "🎯 Hybrid Search Testing"
+        "Embedding Playground",
+        "Corpus Processing",
+        "Similarity Search", 
+        "Model Comparison",
+        "Hybrid Search Testing"
     ])
     
     with tab1:
@@ -117,7 +117,7 @@ def main():
 
 def embedding_playground(model: str, api_key: Optional[str], device: str, batch_size: int):
     """Interactive embedding generation and visualization."""
-    st.header("🧪 Embedding Playground")
+    st.header("Embedding Playground")
     st.markdown("Generate embeddings for custom text and visualize the results")
     
     col1, col2 = st.columns([2, 1])
@@ -161,7 +161,7 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
             texts = [sample_papers[key] for key in selected_samples]
         
         # Text preprocessing options
-        st.subheader("🔧 Text Preprocessing")
+        st.subheader("Text Preprocessing")
         col_prefix, col_suffix = st.columns(2)
         
         with col_prefix:
@@ -181,7 +181,7 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
     
     with col2:
         # Model info
-        st.subheader("📋 Model Info")
+        st.subheader("Model Info")
         config = EmbedderConfig(
             model=model,
             batch_size=batch_size,
@@ -196,10 +196,10 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
         **Device:** {device}
         """)
         
-        st.caption("🔸 Model will be loaded when embeddings are generated")
+        st.caption("Model will be loaded when embeddings are generated")
     
     # Generate embeddings
-    if texts and st.button("🚀 Generate Embeddings", type="primary"):
+    if texts and st.button("Generate Embeddings", type="primary"):
         # Create embedder only when needed
         progress_container = st.container()
         with progress_container:
@@ -230,7 +230,7 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
                 status_text.text(f"Processed {i + len(batch)}/{len(processed_texts)} texts...")
             
             embeddings = np.array(embeddings)
-            status_text.text("✅ Embeddings complete!")
+            status_text.text("Embeddings complete!")
             progress_bar.progress(1.0)
                 
                 # Store in session state
@@ -248,12 +248,12 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
 
 
 def corpus_processing(model: str, api_key: Optional[str], device: str, batch_size: int):
-    """Process scientific literature corpus and generate embeddings with metadata."""
-    st.header("📚 Corpus Processing")
-    st.markdown("Process real scientific literature data and generate embeddings with full metadata tracking")
+    """Process SciX corpus and generate embeddings with metadata."""
+    st.header("Corpus Processing")
+    st.markdown("Process real SciX corpus data and generate embeddings with full metadata tracking")
     
     # Configuration section
-    st.subheader("🔧 Corpus Configuration")
+    st.subheader("Corpus Configuration")
     
     col1, col2 = st.columns(2)
     
@@ -286,8 +286,8 @@ def corpus_processing(model: str, api_key: Optional[str], device: str, batch_siz
         
         # Year selection (disabled for full corpus)
         if sample_size == "Full Corpus":
-            st.info("📚 Full Corpus mode: Will automatically discover and process all available years")
-            st.warning("⚡ For maximum performance processing 25M+ papers: Use batch size 256+, ensure GPU memory available")
+            st.info("Full Corpus mode: Will automatically discover and process all available years")
+            st.warning("For maximum performance processing 25M+ papers: Use batch size 256+, ensure GPU memory available")
             year_input = st.text_input(
                 "Years to Process",
                 value="Auto-discover all years",
@@ -334,7 +334,7 @@ def corpus_processing(model: str, api_key: Optional[str], device: str, batch_siz
         truncate_length = st.number_input("Max Text Length", min_value=100, max_value=32000, value=8192, key="corpus_truncate")
     
     # Output configuration
-    st.subheader("💾 Output Configuration")
+    st.subheader("Output Configuration")
     
     col_out1, col_out2 = st.columns(2)
     
@@ -363,13 +363,13 @@ def corpus_processing(model: str, api_key: Optional[str], device: str, batch_siz
         )
     
     # Preview section
-    if st.button("🔍 Preview Data", help="Load a small sample to preview"):
+    if st.button("Preview Data", help="Load a small sample to preview"):
         # Determine preview size based on subset selection
         if sample_size == "Full Corpus":
             preview_limit = 10  # Reasonable default for full corpus preview
             available_years = discover_available_years(input_dir)
             if available_years:
-                st.info(f"🔍 Full Corpus mode: Found {len(available_years)} years ({min(available_years)}-{max(available_years)})")
+                st.info(f"Full Corpus mode: Found {len(available_years)} years ({min(available_years)}-{max(available_years)})")
                 preview_corpus_data(input_dir, str(available_years[0]), custom_fields, preview_limit)
             else:
                 st.error(f"No year files found in {input_dir}")
@@ -384,7 +384,7 @@ def corpus_processing(model: str, api_key: Optional[str], device: str, batch_siz
             preview_corpus_data(input_dir, year_input, custom_fields, preview_limit)
     
     # Main processing button
-    if st.button("🚀 Process Corpus", type="primary"):
+    if st.button("Process Corpus", type="primary"):
         if not Path(input_dir).exists():
             st.error(f"Input directory not found: {input_dir}")
             return
@@ -397,7 +397,7 @@ def corpus_processing(model: str, api_key: Optional[str], device: str, batch_siz
                 return
             years_to_process = ",".join(map(str, available_years))
             limit = None
-            st.info(f"🚀 Processing Full Corpus: {len(available_years)} years ({min(available_years)}-{max(available_years)})")
+            st.info(f"Processing Full Corpus: {len(available_years)} years ({min(available_years)}-{max(available_years)})")
         else:
             years_to_process = year_input
             if sample_size == "Custom":
@@ -431,7 +431,7 @@ def preview_corpus_data(input_dir: str, years: str, fields: List[str], limit: in
         # Parse years
         year_list = parse_years(years)
         
-        st.subheader("📋 Data Preview")
+        st.subheader("Data Preview")
         
         # Show available files first
         input_path = Path(input_dir)
@@ -442,7 +442,7 @@ def preview_corpus_data(input_dir: str, years: str, fields: List[str], limit: in
         # Look for ADS files first, then any JSON files
         ads_files = list(input_path.glob("ads_metadata_*_full.jsonl"))
         if ads_files:
-            st.info(f"📁 Found {len(ads_files)} ADS metadata files:")
+            st.info(f"Found {len(ads_files)} SciX metadata files:")
             for file_path in sorted(ads_files)[:10]:  # Show first 10 files
                 st.text(f"  • {file_path.name}")
             if len(ads_files) > 10:
@@ -476,11 +476,11 @@ def preview_corpus_data(input_dir: str, years: str, fields: List[str], limit: in
                 records.append(record)
             
             if records:
-                st.success(f"✅ Found {len(records)} sample records from {year}")
+                st.success(f"Found {len(records)} sample records from {year}")
                 
                 # Show sample records
                 for i, record in enumerate(records):
-                    with st.expander(f"📄 Sample {i+1}: {record.get('bibcode', 'No bibcode')}"):
+                    with st.expander(f"Sample {i+1}: {record.get('bibcode', 'No bibcode')}"):
                         for field in fields:
                             if field in record:
                                 value = str(record[field])
@@ -528,7 +528,7 @@ def process_corpus_data(
     output_path = Path(output_dir) / subfolder_name
     output_path.mkdir(parents=True, exist_ok=True)
     
-    st.info(f"📁 Output folder: {subfolder_name}")
+    st.info(f"Output folder: {subfolder_name}")
     
     # Parse years
     year_list = parse_years(years)
@@ -538,7 +538,7 @@ def process_corpus_data(
     model_status = st.empty()
     
     try:
-        model_status.text("🔄 Loading embedding model...")
+        model_status.text("Loading embedding model...")
         model_progress.progress(0.3)
         
         config = EmbedderConfig(
@@ -550,7 +550,7 @@ def process_corpus_data(
         embedder = create_embedder(config)
         
         model_progress.progress(1.0)
-        model_status.text(f"✅ Model loaded: {embedder.name} (dim: {embedder.dim})")
+        model_status.text(f"Model loaded: {embedder.name} (dim: {embedder.dim})")
         
     except Exception as e:
         model_status.text("")
@@ -590,7 +590,7 @@ def process_corpus_data(
     
     for year_idx, year in enumerate(year_list):
         with status_container:
-            st.info(f"📅 Processing year {year}...")
+            st.info(f"Processing year {year}...")
         
         # Find year file
         year_file = find_year_file(input_dir, year)
@@ -644,7 +644,7 @@ def process_corpus_data(
                             
                             # Update progress
                             overall_status.text(f"Processed {processed_count:,} papers | {papers_per_second:.1f} papers/sec")
-                            timing_status.text(f"⏱️ Batch: {batch_time:.2f}s | Total: {elapsed_time:.1f}s | ETA: {((limit or 25000000) - processed_count) / papers_per_second / 3600:.1f}h" if papers_per_second > 0 else "⏱️ Calculating...")
+                            timing_status.text(f"Batch: {batch_time:.2f}s | Total: {elapsed_time:.1f}s | ETA: {((limit or 25000000) - processed_count) / papers_per_second / 3600:.1f}h" if papers_per_second > 0 else "Calculating...")
                             
                             # Update batch progress
                             if limit:
@@ -720,7 +720,7 @@ def process_corpus_data(
         save_solr_format(output_path, embeddings_array, all_bibcodes, all_texts, metadata, include_metadata)
     
     # Display success message
-    st.success(f"✅ Processing complete!")
+    st.success(f"Processing complete!")
     st.info(f"""
     **Summary:**
     - Papers processed: {processed_count:,}
@@ -732,7 +732,7 @@ def process_corpus_data(
     """)
     
     # Show download links
-    st.subheader("📥 Download Results")
+    st.subheader("Download Results")
     
     # List output files
     output_files = list(output_path.glob("*"))
@@ -740,7 +740,7 @@ def process_corpus_data(
         if file_path.is_file():
             with open(file_path, 'rb') as f:
                 st.download_button(
-                    label=f"📄 Download {file_path.name}",
+                    label=f"Download {file_path.name}",
                     data=f.read(),
                     file_name=file_path.name,
                     mime="application/octet-stream"
@@ -749,7 +749,7 @@ def process_corpus_data(
 
 def similarity_search(embeddings_dir: str):
     """Search for similar papers in existing embeddings."""
-    st.header("🔍 Similarity Search")
+    st.header("Similarity Search")
     st.markdown("Search for similar papers using your generated embeddings")
     
     # Lazy import heavy dependencies
@@ -806,7 +806,7 @@ def similarity_search(embeddings_dir: str):
             selected_model = st.selectbox("Model", models, key="similarity_model") if models else st.selectbox("Model", ["No models found"], key="similarity_model_none")
             num_results = st.slider("Number of Results", 1, 50, 10, key="similarity_num_results")
         
-        if query and st.button("🔍 Search", type="primary"):
+        if query and st.button("Search", type="primary"):
             search_and_display_results(index, query, selected_year, selected_model, num_results)
     
     except Exception as e:
@@ -815,7 +815,7 @@ def similarity_search(embeddings_dir: str):
 
 def model_comparison(api_key: Optional[str], device: str, batch_size: int):
     """Compare different embedding models side by side."""
-    st.header("⚖️ Model Comparison")
+    st.header("Model Comparison")
     st.markdown("Compare how different models embed the same text")
     
     # Model selection for comparison
@@ -849,17 +849,17 @@ def model_comparison(api_key: Optional[str], device: str, batch_size: int):
         key="comparison_test_text"
     )
     
-    if test_text and st.button("🔄 Compare Models", type="primary"):
+    if test_text and st.button("Compare Models", type="primary"):
         compare_models(selected_models, test_text, api_key, device, batch_size)
 
 
 def hybrid_search_testing(embeddings_dir: str, model: str, api_key: Optional[str], device: str):
     """Test hybrid search combining semantic and keyword search."""
-    st.header("🎯 Hybrid Search Testing")
+    st.header("Hybrid Search Testing")
     st.markdown("Experiment with combining semantic embeddings and keyword search for Solr integration")
     
     # Mock Solr fields for testing
-    st.subheader("🔧 Search Configuration")
+    st.subheader("Search Configuration")
     
     col1, col2 = st.columns(2)
     
@@ -899,13 +899,13 @@ def hybrid_search_testing(embeddings_dir: str, model: str, api_key: Optional[str
         key="hybrid_search_query"
     )
     
-    if query and st.button("🧪 Test Hybrid Search", type="primary"):
+    if query and st.button("Test Hybrid Search", type="primary"):
         test_hybrid_search(query, semantic_weight, keyword_weight, vector_fields, keyword_fields, model, api_key, device)
 
 
 def display_embedding_results(texts: List[str], processed_texts: List[str], embeddings: np.ndarray):
     """Display embedding generation results with visualizations."""
-    st.success(f"✅ Generated {len(embeddings)} embeddings")
+    st.success(f"Generated {len(embeddings)} embeddings")
     
     # Basic stats
     col1, col2, col3 = st.columns(3)
@@ -918,7 +918,7 @@ def display_embedding_results(texts: List[str], processed_texts: List[str], embe
     
     # Similarity matrix if multiple texts
     if len(embeddings) > 1:
-        st.subheader("📊 Similarity Matrix")
+        st.subheader("Similarity Matrix")
         similarity_matrix = np.dot(embeddings, embeddings.T)
         
         # Normalize
@@ -946,7 +946,7 @@ def display_embedding_results(texts: List[str], processed_texts: List[str], embe
     
     # Dimensionality reduction visualization
     if len(embeddings) > 2:
-        st.subheader("🗺️ Embedding Visualization (2D Projection)")
+        st.subheader("Embedding Visualization (2D Projection)")
         
         try:
             from sklearn.decomposition import PCA
@@ -1005,7 +1005,7 @@ def display_embedding_results(texts: List[str], processed_texts: List[str], embe
         st.plotly_chart(fig, use_container_width=True)
     
     # Raw embeddings download
-    if st.button("💾 Download Embeddings"):
+    if st.button("Download Embeddings"):
         # Prepare data for download
         embedding_data = {
             'texts': texts,
@@ -1015,7 +1015,7 @@ def display_embedding_results(texts: List[str], processed_texts: List[str], embe
         
         json_str = json.dumps(embedding_data, indent=2)
         st.download_button(
-            label="📥 Download as JSON",
+            label="Download as JSON",
             data=json_str,
             file_name="embeddings.json",
             mime="application/json"
@@ -1144,7 +1144,7 @@ def test_hybrid_search(query: str, semantic_weight: float, keyword_weight: float
                       vector_fields: List[str], keyword_fields: List[str],
                       model: str, api_key: Optional[str], device: str):
     """Simulate hybrid search testing."""
-    st.subheader("🧪 Hybrid Search Simulation")
+    st.subheader("Hybrid Search Simulation")
     
     # Generate query embedding
     try:
@@ -1152,7 +1152,7 @@ def test_hybrid_search(query: str, semantic_weight: float, keyword_weight: float
         embedder = create_embedder(config)
         query_embedding = embedder.embed_single(query)
         
-        st.success("✅ Query embedding generated")
+        st.success("Query embedding generated")
         
         # Mock search results
         st.markdown("**Simulated Solr Query:**")
@@ -1176,14 +1176,14 @@ def test_hybrid_search(query: str, semantic_weight: float, keyword_weight: float
         st.markdown("**Expected Behavior:**")
         
         if semantic_weight > keyword_weight:
-            st.info("🎯 **Semantic-heavy search**: Results will prioritize conceptual similarity over exact keyword matches")
+            st.info("**Semantic-heavy search**: Results will prioritize conceptual similarity over exact keyword matches")
         elif keyword_weight > semantic_weight:
-            st.info("🔍 **Keyword-heavy search**: Results will prioritize exact term matches over conceptual similarity")
+            st.info("**Keyword-heavy search**: Results will prioritize exact term matches over conceptual similarity")
         else:
-            st.info("⚖️ **Balanced search**: Equal weight given to semantic and keyword matching")
+            st.info("**Balanced search**: Equal weight given to semantic and keyword matching")
         
         # Configuration export
-        st.subheader("💾 Export Configuration")
+        st.subheader("Export Configuration")
         
         config_data = {
             'hybrid_search_config': {
@@ -1200,7 +1200,7 @@ def test_hybrid_search(query: str, semantic_weight: float, keyword_weight: float
         st.code(yaml_config, language="yaml")
         
         st.download_button(
-            label="📥 Download Hybrid Search Config",
+            label="Download Hybrid Search Config",
             data=yaml_config,
             file_name="hybrid_search_config.yaml",
             mime="text/yaml"
@@ -1417,7 +1417,7 @@ def save_solr_format(output_path: Path, embeddings: np.ndarray, bibcodes: List[s
 
 
 def get_sample_papers() -> Dict[str, str]:
-    """Return sample astronomical paper abstracts for testing."""
+    """Return sample scientific paper abstracts for testing."""
     return {
         "Exoplanet Detection": "We present the discovery of a new exoplanet using the transit method with the Kepler Space Telescope. The planet, designated KOI-123b, orbits a sun-like star every 45.2 days and shows evidence of atmospheric water vapor.",
         
