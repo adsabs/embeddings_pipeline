@@ -232,19 +232,19 @@ def embedding_playground(model: str, api_key: Optional[str], device: str, batch_
             embeddings = np.array(embeddings)
             status_text.text("Embeddings complete!")
             progress_bar.progress(1.0)
-                
-                # Store in session state
-                st.session_state.embeddings_cache[model] = {
-                    'texts': texts,
-                    'processed_texts': processed_texts,
-                    'embeddings': embeddings
-                }
-                
-                # Display results
-                display_embedding_results(texts, processed_texts, embeddings)
-                
-            except Exception as e:
-                st.error(f"Error generating embeddings: {e}")
+            
+            # Store in session state
+            st.session_state.embeddings_cache[model] = {
+                'texts': texts,
+                'processed_texts': processed_texts,
+                'embeddings': embeddings
+            }
+            
+            # Display results
+            display_embedding_results(texts, processed_texts, embeddings)
+            
+        except Exception as e:
+            st.error(f"Error generating embeddings: {e}")
 
 
 def corpus_processing(model: str, api_key: Optional[str], device: str, batch_size: int):
